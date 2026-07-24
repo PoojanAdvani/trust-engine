@@ -1,0 +1,22 @@
+# Trust Engine configuration.
+#
+# Signal weights and trust-band cutoffs are loaded from here at startup, so they
+# can be tuned without changing code. Each signal block accepts `weight` plus any
+# tuning parameters supported by that signal (see src/trust_engine/signals.py).
+
+signals:
+  account_history:
+    weight: 1.0
+    maturity_days: 365
+  claim_details:
+    weight: 1.0
+    high_amount: 10000.0
+    stale_after_days: 90
+  risk_flags:
+    weight: 1.5
+
+# Score cutoffs (0-100). value >= high_min -> HIGH; >= medium_min -> MEDIUM;
+# otherwise LOW.
+bands:
+  medium_min: 40.0
+  high_min: 70.0
