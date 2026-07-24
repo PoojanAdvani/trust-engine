@@ -1,5 +1,7 @@
 # Trust Engine
 
+[![CI](https://github.com/PoojanAdvani/trust-engine/actions/workflows/ci.yml/badge.svg)](https://github.com/PoojanAdvani/trust-engine/actions/workflows/ci.yml)
+
 A Python engine for computing and managing trust scores.
 
 ## Overview
