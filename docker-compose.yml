@@ -1,0 +1,17 @@
+services:
+  api:
+    build: .
+    image: trust-engine:latest
+    ports:
+      - "8000:8000"
+    environment:
+      TRUST_ENGINE_CONFIG_PATH: /app/config.yaml
+      TRUST_ENGINE_DB_PATH: /data/trust_engine.db
+      # Set TRUST_ENGINE_API_KEY in your shell or a .env file to require auth.
+      TRUST_ENGINE_API_KEY: ${TRUST_ENGINE_API_KEY:-}
+    volumes:
+      # Persist the SQLite audit database on the host for durability.
+      - ./data:/data
+      # Override the bundled config without rebuilding the image.
+      - ./config.yaml:/app/config.yaml:ro
+    restart: unless-stopped

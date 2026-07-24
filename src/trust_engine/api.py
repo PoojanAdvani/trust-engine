@@ -11,6 +11,7 @@ disabled so local development works out of the box.
 
 from __future__ import annotations
 
+import hmac
 from dataclasses import asdict
 
 from fastapi import Depends, FastAPI, HTTPException, status
@@ -114,7 +115,10 @@ def create_app(
     def require_api_key(provided: str | None = Depends(api_key_scheme)) -> None:
         if resolved_api_key is None:
             return  # authentication disabled
-        if not provided or provided != resolved_api_key:
+        # Constant-time comparison avoids leaking the key via response timing.
+        expected = resolved_api_key.encode("utf-8")
+        supplied = (provided or "").encode("utf-8")
+        if not provided or not hmac.compare_digest(supplied, expected):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid or missing API key",

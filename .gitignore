@@ -17,6 +17,7 @@ env/
 # Databases
 *.db
 *.sqlite3
+data/
 
 # Testing / coverage
 .pytest_cache/

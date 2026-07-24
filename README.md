@@ -83,6 +83,22 @@ Every evaluation is written to a SQLite database (`trust_engine.db` by default)
 capturing the full input payload, score, band, per-signal results, and
 explanation for audit history.
 
+## Docker
+
+Build and run the API in a container with [`docker-compose.yml`](docker-compose.yml):
+
+```bash
+docker compose up --build
+```
+
+The service listens on http://127.0.0.1:8000 (Swagger UI at `/docs`). The
+SQLite audit database is persisted to `./data` on the host, and `./config.yaml`
+is mounted read-only so weights/cutoffs can be changed without rebuilding. Set
+`TRUST_ENGINE_API_KEY` in your shell (or a `.env` file) to require authentication.
+
+The image is a multi-stage build on `python:3.13-slim` and runs uvicorn as a
+non-root user.
+
 ## Project Structure
 
 ```
