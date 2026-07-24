@@ -48,12 +48,33 @@ class RiskFlags:
 
 
 @dataclass(frozen=True)
+class ImageAnalysis:
+    """Features extracted from a return photo by a vision provider.
+
+    All scores are in ``[0.0, 1.0]`` where higher means *more* concerning. Only
+    these lightweight features are carried on the subject (and thus persisted) —
+    never the raw image bytes. When ``analyzed`` is ``False`` the image signals
+    treat the subject as neutral.
+    """
+
+    analyzed: bool = False
+    damage_score: float = 0.0      # visible damage / spoilage / wrong item
+    synthetic_score: float = 0.0   # likelihood the image is AI-generated
+    edited_score: float = 0.0      # likelihood the image was manipulated
+    reused_score: float = 0.0      # likelihood the image was reused from the internet
+    phash: str = ""                # perceptual hash for dedup / reuse detection
+    provider: str = ""             # name of the provider that produced these features
+    notes: str = ""                # optional human-readable detail
+
+
+@dataclass(frozen=True)
 class TrustSubject:
     """The full set of signals for one trust evaluation."""
 
     account: AccountHistory = field(default_factory=AccountHistory)
     claim: ClaimDetails = field(default_factory=ClaimDetails)
     risk: RiskFlags = field(default_factory=RiskFlags)
+    image: ImageAnalysis = field(default_factory=ImageAnalysis)
 
 
 class TrustBand(str, Enum):
@@ -66,12 +87,19 @@ class TrustBand(str, Enum):
 
 @dataclass(frozen=True)
 class SignalResult:
-    """The outcome of evaluating a single signal."""
+    """The outcome of evaluating a single signal.
+
+    ``applicable=False`` marks a signal that has no input to act on for this
+    subject (e.g. an image signal when no photo was analyzed). The engine
+    excludes such results from the weighted average so they neither inflate nor
+    deflate the score.
+    """
 
     name: str
     score: float  # normalized to [0.0, 1.0]
     weight: float
     reason: str
+    applicable: bool = True
 
 
 @dataclass(frozen=True)

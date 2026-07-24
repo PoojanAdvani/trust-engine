@@ -23,7 +23,8 @@ bands:
 def test_missing_file_falls_back_to_defaults(tmp_path):
     config = load_config(tmp_path / "does_not_exist.yaml")
     assert config.band_thresholds == DEFAULT_BAND_THRESHOLDS
-    assert len(config.signals) == 3
+    # 3 core signals + 2 image signals.
+    assert len(config.signals) == 5
 
 
 def test_weights_and_bands_loaded(tmp_path):

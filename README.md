@@ -50,10 +50,45 @@ pytest
 
 - `POST /evaluate` — score a subject and log the result; returns the score,
   band, per-signal breakdown, explanation, and the audit `evaluation_id`.
+- `POST /returns/evaluate` — verify an uploaded return photo (multipart) and
+  score it through the full pipeline; returns the same fields plus the extracted
+  `image` features. Accepts an optional `context_json` form field with the same
+  shape as the `/evaluate` body.
 - `GET /evaluations/{id}` — fetch a logged evaluation.
 - `GET /evaluations?limit=N` — list recent evaluations, newest first.
 - `GET /health` — liveness check.
 - `GET /docs` — interactive Swagger UI.
+
+## Image fraud detection (vision pipeline)
+
+`POST /returns/evaluate` verifies return photos for two signals that feed the
+same trust score:
+
+- **`image_condition`** — visible damage, spoilage, or wrong item.
+- **`image_authenticity`** — synthetic (AI-generated), edited, or reused-from-the-internet.
+
+Vision analysis runs upstream in the async endpoint; only the extracted
+*features* (scores + a perceptual hash) are carried on the subject and persisted
+— **never the raw image bytes**. The two signals are neutral (excluded from the
+average) for non-photo evaluations.
+
+Backends are pluggable via a `VisionProvider`, selected by
+`TRUST_ENGINE_VISION_PROVIDER`:
+
+| Provider | Deps | Notes |
+| -------- | ---- | ----- |
+| `stub` (default) | none | Deterministic; for dev/tests. Keeps the base image slim. |
+| `cloud` | `[vision]` (`httpx`) | Calls an external HTTP vision API (`TRUST_ENGINE_VISION_API_URL`/`_API_KEY`). |
+| `onnx` | `[vision]` (`onnxruntime`, `opencv-python-headless`, `pillow`) | Local model at `TRUST_ENGINE_VISION_MODEL_PATH`. |
+
+Install the heavy backends with `pip install .[vision]`, or build the dedicated
+image: `docker build -f Dockerfile.vision -t trust-engine:vision .`
+
+Example:
+
+```bash
+curl -F "file=@return.jpg;type=image/jpeg" http://127.0.0.1:8000/returns/evaluate
+```
 
 ## Configuration
 
@@ -71,6 +106,11 @@ Runtime settings are read from the environment (or a local `.env` file):
 | `TRUST_ENGINE_CONFIG_PATH` | `config.yaml`      | Path to the YAML config file     |
 | `TRUST_ENGINE_DB_PATH`     | `trust_engine.db`  | Path to the SQLite audit database |
 | `TRUST_ENGINE_API_KEY`     | _(unset)_          | Required API key; unset disables auth |
+| `TRUST_ENGINE_VISION_PROVIDER` | `stub`         | Vision backend: `stub`, `cloud`, or `onnx` |
+| `TRUST_ENGINE_VISION_API_URL`  | _(unset)_      | Cloud provider endpoint URL |
+| `TRUST_ENGINE_VISION_API_KEY`  | _(unset)_      | Cloud provider API key |
+| `TRUST_ENGINE_VISION_MODEL_PATH` | _(unset)_    | ONNX model path for the local provider |
+| `TRUST_ENGINE_VISION_MAX_BYTES` | `8000000`     | Max accepted upload size (bytes) |
 
 ## Authentication
 
@@ -108,14 +148,18 @@ trust-engine/
 ├── src/
 │   └── trust_engine/
 │       ├── models.py     # Input/output data models
-│       ├── signals.py    # Pluggable scoring signals
+│       ├── signals.py    # Pluggable scoring signals (incl. image signals)
 │       ├── engine.py     # TrustEngine aggregator
 │       ├── config.py     # YAML config loader
 │       ├── storage.py    # SQLite audit store
+│       ├── vision.py     # Pluggable vision providers (stub/cloud/onnx)
+│       ├── settings.py   # Environment configuration
 │       └── api.py        # FastAPI application
 ├── tests/                # Test suite
 ├── docs/                 # Documentation
 ├── config.yaml           # Signal weights & band cutoffs
+├── Dockerfile            # Slim base image (stub provider)
+├── Dockerfile.vision     # Image with the [vision] extra
 ├── pyproject.toml        # Project metadata & dependencies
 └── README.md
 ```

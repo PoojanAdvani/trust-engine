@@ -14,6 +14,12 @@ signals:
     stale_after_days: 90
   risk_flags:
     weight: 1.5
+  # Vision signals. Neutral (no effect) unless a return photo has been analyzed
+  # via POST /returns/evaluate.
+  image_condition:
+    weight: 1.0
+  image_authenticity:
+    weight: 2.0
 
 # Score cutoffs (0-100). value >= high_min -> HIGH; >= medium_min -> MEDIUM;
 # otherwise LOW.

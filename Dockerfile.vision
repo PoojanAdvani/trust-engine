@@ -1,0 +1,51 @@
+# syntax=docker/dockerfile:1
+#
+# Vision variant: installs the heavy [vision] extra (onnxruntime, opencv,
+# pillow). Build with:  docker build -f Dockerfile.vision -t trust-engine:vision .
+# The base Dockerfile stays slim and uses the default stub provider.
+
+# --- Builder stage: install the package + vision extra into a venv ---
+FROM python:3.13-slim AS builder
+
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_NO_CACHE_DIR=1
+
+WORKDIR /app
+
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+COPY pyproject.toml README.md ./
+COPY src ./src
+RUN pip install ".[vision]"
+
+# --- Runtime stage ---
+FROM python:3.13-slim AS runtime
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PATH="/opt/venv/bin:$PATH" \
+    TRUST_ENGINE_CONFIG_PATH=/app/config.yaml \
+    TRUST_ENGINE_DB_PATH=/data/trust_engine.db \
+    TRUST_ENGINE_VISION_PROVIDER=onnx
+
+# opencv (even headless) needs these shared libraries at runtime.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libgl1 libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN useradd --create-home --uid 1000 appuser
+
+WORKDIR /app
+
+COPY --from=builder /opt/venv /opt/venv
+COPY config.yaml ./config.yaml
+
+RUN mkdir -p /data && chown -R appuser:appuser /app /data
+
+USER appuser
+
+EXPOSE 8000
+
+CMD ["uvicorn", "trust_engine.api:create_app", "--factory", \
+     "--host", "0.0.0.0", "--port", "8000"]

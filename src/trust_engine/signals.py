@@ -130,6 +130,73 @@ class RiskFlagsSignal:
         return SignalResult(self.name, score, self.weight, reason)
 
 
+@dataclass(frozen=True)
+class ImageConditionSignal:
+    """Scores the physical condition of an analyzed return photo.
+
+    Higher ``damage_score`` (visible damage, spoilage, or wrong item) lowers
+    trust. Neutral (``1.0``) when no photo was analyzed, mirroring
+    :class:`RiskFlagsSignal`'s empty-input convention.
+    """
+
+    name: str = "image_condition"
+    weight: float = 1.0
+
+    def evaluate(self, subject: TrustSubject) -> SignalResult:
+        image = subject.image
+
+        if not image.analyzed:
+            return SignalResult(
+                self.name, 1.0, self.weight, "no photo analyzed", applicable=False
+            )
+
+        score = _clamp(1.0 - image.damage_score)
+        reason = f"damage_score={image.damage_score:.2f} (provider={image.provider or 'unknown'})"
+        return SignalResult(self.name, score, self.weight, reason)
+
+
+@dataclass(frozen=True)
+class ImageAuthenticitySignal:
+    """Scores whether an analyzed photo is authentic vs synthetic/edited/reused.
+
+    Trust is driven down by the most severe of the synthetic, edited, and reused
+    likelihoods. Neutral (``1.0``) when no photo was analyzed.
+    """
+
+    name: str = "image_authenticity"
+    weight: float = 2.0
+
+    def evaluate(self, subject: TrustSubject) -> SignalResult:
+        image = subject.image
+
+        if not image.analyzed:
+            return SignalResult(
+                self.name, 1.0, self.weight, "no photo analyzed", applicable=False
+            )
+
+        components = {
+            "synthetic": image.synthetic_score,
+            "edited": image.edited_score,
+            "reused": image.reused_score,
+        }
+        fraud = _clamp(max(components.values()))
+        score = _clamp(1.0 - fraud)
+
+        raised = ", ".join(
+            f"{name}={value:.2f}"
+            for name, value in sorted(components.items())
+            if value > 0.0
+        )
+        reason = raised if raised else "no authenticity concerns"
+        return SignalResult(self.name, score, self.weight, reason)
+
+
 def default_signals() -> list[Signal]:
     """Return the standard signal set with default weights."""
-    return [AccountHistorySignal(), ClaimDetailsSignal(), RiskFlagsSignal()]
+    return [
+        AccountHistorySignal(),
+        ClaimDetailsSignal(),
+        RiskFlagsSignal(),
+        ImageConditionSignal(),
+        ImageAuthenticitySignal(),
+    ]

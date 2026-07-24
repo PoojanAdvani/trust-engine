@@ -23,3 +23,11 @@ class Settings(BaseSettings):
     db_path: str = "trust_engine.db"
     # When None, API-key authentication is disabled (open access).
     api_key: str | None = None
+
+    # Vision pipeline. "stub" (default) needs no extra dependencies; "cloud" and
+    # "onnx" require the `vision` extra and the relevant fields below.
+    vision_provider: str = "stub"
+    vision_api_url: str | None = None
+    vision_api_key: str | None = None
+    vision_model_path: str | None = None
+    vision_max_bytes: int = 8_000_000  # reject uploads larger than ~8 MB

@@ -45,12 +45,17 @@ class TrustEngine:
         self.band_thresholds = band_thresholds
 
     def score(self, subject: TrustSubject) -> TrustScore:
-        """Evaluate ``subject`` against all signals and return a TrustScore."""
-        results = tuple(signal.evaluate(subject) for signal in self.signals)
+        """Evaluate ``subject`` against all signals and return a TrustScore.
+
+        Signals that report ``applicable=False`` (e.g. image signals with no
+        photo) are excluded from the weighted average and from the breakdown.
+        """
+        evaluated = (signal.evaluate(subject) for signal in self.signals)
+        results = tuple(r for r in evaluated if r.applicable)
 
         total_weight = sum(r.weight for r in results)
         if total_weight <= 0:
-            raise ValueError("Total signal weight must be positive")
+            raise ValueError("No applicable signals with positive weight to score")
 
         weighted = sum(r.score * r.weight for r in results) / total_weight
         value = round(weighted * 100.0, 1)

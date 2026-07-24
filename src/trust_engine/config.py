@@ -11,6 +11,8 @@ import yaml
 from .signals import (
     AccountHistorySignal,
     ClaimDetailsSignal,
+    ImageAuthenticitySignal,
+    ImageConditionSignal,
     RiskFlagsSignal,
     Signal,
     default_signals,
@@ -21,6 +23,8 @@ SIGNAL_REGISTRY: dict[str, type] = {
     "account_history": AccountHistorySignal,
     "claim_details": ClaimDetailsSignal,
     "risk_flags": RiskFlagsSignal,
+    "image_condition": ImageConditionSignal,
+    "image_authenticity": ImageAuthenticitySignal,
 }
 
 DEFAULT_BAND_THRESHOLDS: tuple[float, float] = (40.0, 70.0)

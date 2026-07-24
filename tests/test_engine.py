@@ -91,6 +91,7 @@ def test_results_include_every_signal():
     engine = TrustEngine()
     result = engine.score(TrustSubject())
     names = {r.name for r in result.results}
+    # Image signals are excluded when no photo was analyzed.
     assert names == {"account_history", "claim_details", "risk_flags"}
 
 

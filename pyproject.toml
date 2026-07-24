@@ -13,11 +13,20 @@ dependencies = [
     "uvicorn[standard]>=0.29",
     "pyyaml>=6.0",
     "pydantic-settings>=2.0",
+    "python-multipart>=0.0.9",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
+    "httpx>=0.27",
+]
+# Heavy computer-vision backends. Not installed by default so the base image and
+# CI stay slim; enable with `pip install .[vision]`.
+vision = [
+    "onnxruntime>=1.17",
+    "opencv-python-headless>=4.9",
+    "pillow>=10",
     "httpx>=0.27",
 ]
 
@@ -29,3 +38,6 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "vision: tests that require the optional [vision] extra",
+]
