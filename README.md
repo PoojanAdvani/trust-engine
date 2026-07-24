@@ -60,6 +60,23 @@ are loaded at startup, so they can be tuned without code changes. Each signal
 block also accepts that signal's tuning parameters (e.g. `maturity_days`). If
 the file is absent, built-in defaults are used.
 
+### Environment variables
+
+Runtime settings are read from the environment (or a local `.env` file):
+
+| Variable                   | Default            | Purpose                          |
+| -------------------------- | ------------------ | -------------------------------- |
+| `TRUST_ENGINE_CONFIG_PATH` | `config.yaml`      | Path to the YAML config file     |
+| `TRUST_ENGINE_DB_PATH`     | `trust_engine.db`  | Path to the SQLite audit database |
+| `TRUST_ENGINE_API_KEY`     | _(unset)_          | Required API key; unset disables auth |
+
+## Authentication
+
+When `TRUST_ENGINE_API_KEY` is set, `/evaluate` and the `/evaluations` endpoints
+require a matching `X-API-Key` request header (missing/invalid → `401`). The
+`/health` and `/docs` endpoints stay public. If no key is configured,
+authentication is disabled for local development.
+
 ## Persistence
 
 Every evaluation is written to a SQLite database (`trust_engine.db` by default)

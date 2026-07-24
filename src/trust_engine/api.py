@@ -2,20 +2,29 @@
 
 Build an app with :func:`create_app` (used by tests and the ``trust-engine-api``
 console script). Interactive Swagger UI is served at ``/docs``.
+
+The ``/evaluate`` and ``/evaluations`` endpoints require an ``X-API-Key`` header
+when an API key is configured (via ``TRUST_ENGINE_API_KEY`` or the ``api_key``
+argument). ``/health`` is always public. When no key is configured, auth is
+disabled so local development works out of the box.
 """
 
 from __future__ import annotations
 
 from dataclasses import asdict
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi.security import APIKeyHeader
 from pydantic import BaseModel, Field
 
 from . import __version__
-from .config import DEFAULT_CONFIG_PATH, load_config
+from .config import load_config
 from .engine import TrustEngine
 from .models import AccountHistory, ClaimDetails, RiskFlags, TrustSubject
+from .settings import Settings
 from .storage import EvaluationStore
+
+API_KEY_HEADER = "X-API-Key"
 
 
 # --- Request/response schemas (drive the Swagger docs) ---------------------
@@ -68,13 +77,26 @@ class EvaluateResponse(BaseModel):
 
 
 def create_app(
-    config_path: str = DEFAULT_CONFIG_PATH,
-    db_path: str = "trust_engine.db",
+    config_path: str | None = None,
+    db_path: str | None = None,
+    api_key: str | None = None,
+    settings: Settings | None = None,
 ) -> FastAPI:
-    """Create a configured FastAPI app backed by an engine and audit store."""
-    config = load_config(config_path)
+    """Create a configured FastAPI app backed by an engine and audit store.
+
+    Explicit arguments take precedence over environment-derived ``settings``,
+    which fall back to their own defaults.
+    """
+    if settings is None:
+        settings = Settings()
+
+    resolved_config_path = config_path or settings.config_path
+    resolved_db_path = db_path or settings.db_path
+    resolved_api_key = api_key if api_key is not None else settings.api_key
+
+    config = load_config(resolved_config_path)
     engine = TrustEngine(config.signals, config.band_thresholds)
-    store = EvaluationStore(db_path)
+    store = EvaluationStore(resolved_db_path)
 
     app = FastAPI(
         title="Trust Engine API",
@@ -83,8 +105,27 @@ def create_app(
     )
     app.state.engine = engine
     app.state.store = store
+    app.state.api_key = resolved_api_key
 
-    @app.post("/evaluate", response_model=EvaluateResponse, tags=["scoring"])
+    # auto_error=False lets us allow open access when no key is configured and
+    # still surface an Authorize button in Swagger when one is.
+    api_key_scheme = APIKeyHeader(name=API_KEY_HEADER, auto_error=False)
+
+    def require_api_key(provided: str | None = Depends(api_key_scheme)) -> None:
+        if resolved_api_key is None:
+            return  # authentication disabled
+        if not provided or provided != resolved_api_key:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or missing API key",
+            )
+
+    @app.post(
+        "/evaluate",
+        response_model=EvaluateResponse,
+        tags=["scoring"],
+        dependencies=[Depends(require_api_key)],
+    )
     def evaluate(request: EvaluateRequest) -> EvaluateResponse:
         """Score a subject across all signals and log the result for audit."""
         subject = TrustSubject(
@@ -102,7 +143,11 @@ def create_app(
             explanation=score.explain(),
         )
 
-    @app.get("/evaluations/{evaluation_id}", tags=["audit"])
+    @app.get(
+        "/evaluations/{evaluation_id}",
+        tags=["audit"],
+        dependencies=[Depends(require_api_key)],
+    )
     def get_evaluation(evaluation_id: int) -> dict:
         """Fetch a single logged evaluation by id."""
         record = store.get(evaluation_id)
@@ -110,13 +155,18 @@ def create_app(
             raise HTTPException(status_code=404, detail="evaluation not found")
         return record
 
-    @app.get("/evaluations", tags=["audit"])
+    @app.get(
+        "/evaluations",
+        tags=["audit"],
+        dependencies=[Depends(require_api_key)],
+    )
     def list_evaluations(limit: int = 50) -> list[dict]:
         """List recent evaluations, newest first."""
         return store.list(limit)
 
     @app.get("/health", tags=["ops"])
     def health() -> dict:
+        """Public liveness check (no authentication required)."""
         return {"status": "ok", "evaluations_logged": store.count()}
 
     return app

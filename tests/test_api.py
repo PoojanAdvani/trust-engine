@@ -6,9 +6,19 @@ from fastapi.testclient import TestClient
 from trust_engine.api import create_app
 
 
+API_KEY = "test-secret-key"
+
+
 @pytest.fixture
 def client(tmp_path):
     app = create_app(db_path=str(tmp_path / "api.db"))
+    with TestClient(app) as test_client:
+        yield test_client
+
+
+@pytest.fixture
+def secured_client(tmp_path):
+    app = create_app(db_path=str(tmp_path / "api.db"), api_key=API_KEY)
     with TestClient(app) as test_client:
         yield test_client
 
@@ -74,3 +84,43 @@ def test_swagger_docs_available(client):
 def test_health(client):
     body = client.get("/health").json()
     assert body["status"] == "ok"
+
+
+# --- Authentication --------------------------------------------------------
+
+
+def test_evaluate_rejected_without_api_key(secured_client):
+    response = secured_client.post("/evaluate", json={})
+    assert response.status_code == 401
+
+
+def test_evaluate_rejected_with_wrong_api_key(secured_client):
+    response = secured_client.post(
+        "/evaluate", json={}, headers={"X-API-Key": "wrong"}
+    )
+    assert response.status_code == 401
+
+
+def test_evaluate_allowed_with_correct_api_key(secured_client):
+    response = secured_client.post(
+        "/evaluate", json={}, headers={"X-API-Key": API_KEY}
+    )
+    assert response.status_code == 200
+    assert "value" in response.json()
+
+
+def test_evaluations_endpoints_require_api_key(secured_client):
+    assert secured_client.get("/evaluations").status_code == 401
+    assert secured_client.get("/evaluations/1").status_code == 401
+
+    authed = {"X-API-Key": API_KEY}
+    assert secured_client.get("/evaluations", headers=authed).status_code == 200
+
+
+def test_health_is_public_when_secured(secured_client):
+    response = secured_client.get("/health")
+    assert response.status_code == 200
+
+
+def test_docs_public_when_secured(secured_client):
+    assert secured_client.get("/docs").status_code == 200
