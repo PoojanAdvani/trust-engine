@@ -42,6 +42,7 @@
     color: #fff;
     padding: 18px 18px 22px;
   }
+  .header-top { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
   .wordmark {
     font-size: 26px;
     font-weight: 800;
@@ -56,6 +57,27 @@
     align-items: center;
     gap: 6px;
   }
+
+  /* Demo/Inspector toggle switch */
+  .demo-switch { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; }
+  .demo-switch .lbl { font-size: 11px; font-weight: 600; opacity: 0.95; text-align: right; line-height: 1.2; max-width: 96px; }
+  .demo-switch input { position: absolute; opacity: 0; width: 0; height: 0; }
+  .demo-switch .track {
+    width: 40px; height: 23px; border-radius: 20px; background: rgba(255,255,255,0.3);
+    position: relative; flex-shrink: 0; transition: background .2s;
+  }
+  .demo-switch .knob {
+    position: absolute; top: 2px; left: 2px; width: 19px; height: 19px; border-radius: 50%;
+    background: #fff; transition: transform .2s; box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+  }
+  .demo-switch input:checked + .track { background: rgba(255,255,255,0.85); }
+  .demo-switch input:checked + .track .knob { transform: translateX(17px); background: var(--zred); }
+
+  /* Demo-only surfaces: hidden for regular customers, shown in demo mode. */
+  .demo-only { display: none; }
+  body.demo .demo-only { display: block; }
+  .result .accordion { display: none; }
+  body.demo .result .accordion { display: block; }
 
   .content { padding: 16px; display: flex; flex-direction: column; gap: 14px; padding-bottom: 40px; }
 
@@ -199,7 +221,14 @@
 <body>
 <div class="phone">
   <header class="header">
-    <div class="wordmark">zomato</div>
+    <div class="header-top">
+      <div class="wordmark">zomato</div>
+      <label class="demo-switch" title="Enable Demo/Inspector Mode">
+        <span class="lbl">🛠️ Demo / Inspector Mode</span>
+        <input type="checkbox" id="demoToggle" />
+        <span class="track"><span class="knob"></span></span>
+      </label>
+    </div>
     <div class="sub">📍 Koramangala · Order support</div>
   </header>
 
@@ -247,8 +276,8 @@
       </div>
     </section>
 
-    <!-- Demo controls -->
-    <section class="card">
+    <!-- Demo controls (only shown in Demo/Inspector mode) -->
+    <section class="card demo-only">
       <span class="demo-tag">⚙️ DEMO CONTROLS</span>
       <div class="controls">
         <div class="field">
@@ -296,6 +325,7 @@
 
   var stream = null;
   var photoBlob = null;
+  var cameraMode = false;
 
   var LABELS = {
     account_history: "Account History",
@@ -320,17 +350,31 @@
     retakeBtn.classList.remove("hidden");
   }
 
-  function backToCamera() {
-    preview.classList.add("hidden");
+  // Stop the webcam so the hardware and its indicator light turn OFF.
+  function stopCamera() {
     if (stream) {
-      video.classList.remove("hidden");
-      camBadge.classList.remove("hidden");
-      snapBtn.classList.remove("hidden");
+      stream.getTracks().forEach(function (track) { track.stop(); });
+      stream = null;
+    }
+    video.srcObject = null;
+    video.classList.add("hidden");
+    camBadge.classList.add("hidden");
+  }
+
+  // Retake clears the shot and, in camera mode, re-enables the camera.
+  function retake() {
+    preview.classList.add("hidden");
+    retakeBtn.classList.add("hidden");
+    setPhoto(null);
+    resultCard.classList.add("hidden");
+    errorCard.classList.add("hidden");
+    if (cameraMode) {
+      camPlaceholder.textContent = "Restarting camera…";
+      camPlaceholder.classList.remove("hidden");
+      initCamera();
     } else {
       camPlaceholder.classList.remove("hidden");
     }
-    retakeBtn.classList.add("hidden");
-    setPhoto(null);
   }
 
   // --- Camera ---
@@ -342,11 +386,14 @@
       .getUserMedia({ video: { facingMode: "environment" }, audio: false })
       .then(function (s) {
         stream = s;
+        cameraMode = true;
         video.srcObject = s;
         video.classList.remove("hidden");
         camBadge.classList.remove("hidden");
         camPlaceholder.classList.add("hidden");
         cameraControls.classList.remove("hidden");
+        snapBtn.classList.remove("hidden");
+        retakeBtn.classList.add("hidden");
       })
       .catch(function () {
         enableUploader();
@@ -354,8 +401,10 @@
   }
 
   function enableUploader() {
+    cameraMode = false;
     cameraControls.classList.add("hidden");
     camPlaceholder.textContent = "Camera unavailable";
+    camPlaceholder.classList.remove("hidden");
     uploader.classList.remove("hidden");
   }
 
@@ -369,13 +418,14 @@
         if (!blob) return;
         setPhoto(blob);
         showPreview(URL.createObjectURL(blob));
+        stopCamera(); // turn the webcam hardware + indicator light OFF
       },
       "image/jpeg",
       0.9
     );
   });
 
-  retakeBtn.addEventListener("click", backToCamera);
+  retakeBtn.addEventListener("click", retake);
 
   // --- Uploader fallback ---
   dropzone.addEventListener("click", function () { fileInput.click(); });
@@ -455,18 +505,25 @@
   }
 
   function renderResult(data) {
-    var flagged = data.reuse_matches > 0 || data.band === "low";
+    // Refund is only credited for a trust score >= 50 with NO fraud flags.
+    var reusedScore = data.image && typeof data.image.reused_score === "number"
+      ? data.image.reused_score : 0;
+    var fraud = reusedScore > 0 || data.reuse_matches > 0;
+    var flagged = data.value < 50 || data.band === "low" || fraud;
+
     var reasonSub;
     if (data.reuse_matches > 0) {
       reasonSub = "Duplicate photo detected across " + data.reuse_matches +
-        " prior claim(s). Refund blocked pending review.";
+        " prior claim(s). Refund declined pending review.";
+    } else if (fraud) {
+      reasonSub = "Photo flagged as reused or altered. Refund declined pending review.";
     } else if (flagged) {
-      reasonSub = "Trust score below the safe threshold. Sent to manual review.";
+      reasonSub = "Trust score below the safe threshold. Flagged for manual review.";
     } else {
-      reasonSub = "Verified authentic. Instant refund processed.";
+      reasonSub = "₹340 credited to Zomato Pay · Verified authentic.";
     }
 
-    var statusTitle = flagged ? "Flagged for Fraud" : "₹340 Credited to Zomato Pay";
+    var statusTitle = flagged ? "Flagged for Manual Review" : "Instant Refund Credited";
     var pct = Math.max(0, Math.min(100, data.value));
 
     var signalsHtml = (data.results || [])
@@ -520,6 +577,11 @@
       .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;");
   }
+
+  // --- Demo/Inspector mode: reveals the demo controls + signal breakdown ---
+  document.getElementById("demoToggle").addEventListener("change", function (e) {
+    document.body.classList.toggle("demo", e.target.checked);
+  });
 
   initCamera();
 })();
