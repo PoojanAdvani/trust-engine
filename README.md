@@ -80,7 +80,7 @@ Backends are pluggable via a `VisionProvider`, selected by
 | `stub` (default) | none | Deterministic; for dev/tests. Exact-duplicate detection only. Keeps the base image slim. |
 | `ahash` | `[vision]` (`pillow`) | Real 64-bit average-hash perceptual hash; enables near-duplicate reuse detection. |
 | `cloud` | `[vision]` (`httpx`) | Calls an external HTTP vision API (`TRUST_ENGINE_VISION_API_URL`/`_API_KEY`). |
-| `onnx` | `[vision]` (`onnxruntime`, `opencv-python-headless`, `pillow`) | Local model at `TRUST_ENGINE_VISION_MODEL_PATH`. |
+| `onnx` | `[vision]` (`onnxruntime`, `opencv-python-headless`, `pillow`, `numpy`) | Runs a local ONNX model (`TRUST_ENGINE_VISION_MODEL_PATH`) for `damage_score`/`synthetic_score`; falls back to OpenCV/Pillow heuristic features when no model is set or one fails to load. |
 
 Install the heavy backends with `pip install .[vision]`, or build the dedicated
 image: `docker build -f Dockerfile.vision -t trust-engine:vision .`

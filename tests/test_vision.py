@@ -1,5 +1,7 @@
 """Tests for vision providers and the provider factory."""
 
+from pathlib import Path
+
 import pytest
 
 from trust_engine.models import ImageAnalysis
@@ -108,3 +110,75 @@ def test_average_hash_is_perceptual():
     assert a.phash == b.phash  # identical images -> identical hash
     assert hamming_distance(a.phash, resized.phash) <= 8  # near-duplicate stays close
     assert hamming_distance(a.phash, inverted.phash) >= 16  # different image is far
+
+
+# --- OnnxVisionProvider (Phase 9) ------------------------------------------
+
+TINY_MODEL = Path(__file__).parent / "fixtures" / "tiny.onnx"
+
+
+def _photo_png(seed: int = 0) -> bytes:
+    """A small RGB PNG with some texture (needs Pillow)."""
+    image_mod = pytest.importorskip("PIL.Image")
+    from io import BytesIO
+
+    img = image_mod.new("RGB", (64, 64))
+    px = img.load()
+    for y in range(64):
+        for x in range(64):
+            px[x, y] = ((x * 4 + seed) % 256, (y * 4) % 256, ((x + y) * 2) % 256)
+    buf = BytesIO()
+    img.save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def _assert_valid_features(result):
+    assert result.analyzed is True
+    assert result.provider == "onnx"
+    assert 0.0 <= result.damage_score <= 1.0
+    assert 0.0 <= result.synthetic_score <= 1.0
+    assert len(result.phash) == 16
+
+
+@pytest.mark.vision
+def test_onnx_heuristic_fallback_without_model():
+    pytest.importorskip("cv2")
+    result = OnnxVisionProvider(model_path=None).analyze(_photo_png())
+    _assert_valid_features(result)
+    assert "heuristic" in result.notes.lower()
+
+
+@pytest.mark.vision
+def test_onnx_inference_with_model():
+    pytest.importorskip("onnxruntime")
+    assert TINY_MODEL.exists(), "run tests/fixtures/generate_tiny_onnx.py"
+
+    provider = OnnxVisionProvider(model_path=str(TINY_MODEL))
+    photo = _photo_png()
+    result = provider.analyze(photo)
+    _assert_valid_features(result)
+    assert "onnx inference" in result.notes.lower()
+
+    # Deterministic for identical input.
+    again = provider.analyze(photo)
+    assert again.damage_score == result.damage_score
+    assert again.synthetic_score == result.synthetic_score
+
+
+@pytest.mark.vision
+def test_onnx_bad_model_path_falls_back():
+    pytest.importorskip("cv2")
+    pytest.importorskip("onnxruntime")
+    result = OnnxVisionProvider(model_path="/no/such/model.onnx").analyze(_photo_png())
+    _assert_valid_features(result)
+    assert "load failed" in result.notes.lower()
+
+
+@pytest.mark.vision
+def test_onnx_distinct_inputs_differ():
+    pytest.importorskip("onnxruntime")
+    provider = OnnxVisionProvider(model_path=str(TINY_MODEL))
+    a = provider.analyze(_photo_png(seed=0))
+    b = provider.analyze(_photo_png(seed=99))
+    # Different images -> different perceptual hash (model output may vary too).
+    assert a.phash != b.phash

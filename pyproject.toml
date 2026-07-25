@@ -27,6 +27,7 @@ vision = [
     "onnxruntime>=1.17",
     "opencv-python-headless>=4.9",
     "pillow>=10",
+    "numpy>=1.24",
     "httpx>=0.27",
 ]
 
