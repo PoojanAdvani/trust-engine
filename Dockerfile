@@ -32,6 +32,8 @@ WORKDIR /app
 
 COPY --from=builder /opt/venv /opt/venv
 COPY config.yaml ./config.yaml
+# Prototype UI served at GET /app (resolved relative to WORKDIR).
+COPY frontend ./frontend
 
 # /data holds the SQLite audit database (mounted as a volume in production).
 RUN mkdir -p /data && chown -R appuser:appuser /app /data
