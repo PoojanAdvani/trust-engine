@@ -40,6 +40,11 @@ Serve the web API (Swagger UI at http://127.0.0.1:8000/docs):
 trust-engine-api
 ```
 
+A Zomato-themed prototype UI is served at http://127.0.0.1:8000/app (live camera
+with a drag-and-drop fallback, demo Account/Claim ID controls, and an instant
+refund / fraud resolution card). It is served from [`frontend/`](frontend/) when
+that directory is present.
+
 ### Testing
 
 ```bash
@@ -58,6 +63,7 @@ pytest
 - `GET /evaluations?limit=N` — list recent evaluations, newest first.
 - `GET /health` — liveness check.
 - `GET /docs` — interactive Swagger UI.
+- `GET /app` — Zomato-themed prototype UI (when `frontend/` is present).
 
 ## Image fraud detection (vision pipeline)
 

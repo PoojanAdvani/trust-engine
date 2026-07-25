@@ -86,6 +86,17 @@ def test_health(client):
     assert body["status"] == "ok"
 
 
+def test_app_ui_served(client):
+    """The prototype UI is served at /app when frontend/ is present."""
+    response = client.get("/app")
+    assert response.status_code == 200
+    assert "text/html" in response.headers["content-type"]
+    assert "ZOM-98214" in response.text  # order summary from the prototype
+
+    # Static assets are mounted too.
+    assert client.get("/static/index.html").status_code == 200
+
+
 # --- Authentication --------------------------------------------------------
 
 

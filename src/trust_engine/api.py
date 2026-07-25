@@ -14,10 +14,13 @@ from __future__ import annotations
 import hmac
 import json
 from dataclasses import asdict, replace
+from pathlib import Path
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile, status
 from fastapi.concurrency import run_in_threadpool
+from fastapi.responses import FileResponse
 from fastapi.security import APIKeyHeader
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, ValidationError
 
 from . import __version__
@@ -98,6 +101,23 @@ class ReturnEvaluateResponse(EvaluateResponse):
 
 
 # --- App factory -----------------------------------------------------------
+
+
+def _find_frontend_dir() -> Path | None:
+    """Locate the ``frontend/`` directory, or None if it is not present.
+
+    Tries the current working directory (dev / Docker WORKDIR) and the repo root
+    relative to this file (editable install). Returning None keeps the app usable
+    in deployments that ship without the prototype UI.
+    """
+    candidates = [
+        Path.cwd() / "frontend",
+        Path(__file__).resolve().parents[2] / "frontend",
+    ]
+    for candidate in candidates:
+        if (candidate / "index.html").is_file():
+            return candidate
+    return None
 
 
 def _parse_context(context_json: str | None) -> EvaluateRequest:
@@ -303,6 +323,23 @@ def create_app(
     def health() -> dict:
         """Public liveness check (no authentication required)."""
         return {"status": "ok", "evaluations_logged": store.count()}
+
+    # Serve the Zomato-themed prototype UI when the frontend/ directory is
+    # present. Guarded so deployments without it (e.g. the slim container) still
+    # start cleanly.
+    frontend_dir = _find_frontend_dir()
+    if frontend_dir is not None:
+        app.mount(
+            "/static",
+            StaticFiles(directory=str(frontend_dir)),
+            name="static",
+        )
+        index_file = frontend_dir / "index.html"
+
+        @app.get("/app", tags=["ui"], include_in_schema=False)
+        def app_ui() -> FileResponse:
+            """Serve the prototype single-page UI."""
+            return FileResponse(str(index_file))
 
     return app
 

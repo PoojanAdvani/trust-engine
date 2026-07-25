@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>Zomato · Instant Refund</title>
+<style>
+  :root {
+    --zred: #e23744;
+    --zred-dark: #c72130;
+    --ink: #1c1c1c;
+    --muted: #696969;
+    --line: #ececec;
+    --bg: #f4f4f6;
+    --green: #267e3e;
+    --amber: #f2a73b;
+    --card-shadow: 0 2px 12px rgba(28, 28, 28, 0.08);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    display: flex;
+    justify-content: center;
+    min-height: 100vh;
+  }
+  .phone {
+    width: 100%;
+    max-width: 430px;
+    background: var(--bg);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    overflow-x: hidden;
+  }
+
+  /* Header */
+  .header {
+    background: linear-gradient(135deg, var(--zred) 0%, var(--zred-dark) 100%);
+    color: #fff;
+    padding: 18px 18px 22px;
+  }
+  .wordmark {
+    font-size: 26px;
+    font-weight: 800;
+    letter-spacing: -1px;
+    font-style: italic;
+  }
+  .header .sub {
+    margin-top: 6px;
+    font-size: 13px;
+    opacity: 0.92;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .content { padding: 16px; display: flex; flex-direction: column; gap: 14px; padding-bottom: 40px; }
+
+  .card {
+    background: #fff;
+    border-radius: 16px;
+    box-shadow: var(--card-shadow);
+    padding: 16px;
+  }
+  .card h2 { font-size: 15px; font-weight: 700; }
+  .card .hint { font-size: 12.5px; color: var(--muted); margin-top: 3px; line-height: 1.45; }
+
+  /* Order summary */
+  .order { display: flex; gap: 14px; align-items: center; }
+  .order .thumb {
+    width: 58px; height: 58px; border-radius: 12px;
+    background: #fff2f0; display: grid; place-items: center; font-size: 30px;
+    flex-shrink: 0;
+  }
+  .order .meta { flex: 1; min-width: 0; }
+  .order .oid { font-size: 11.5px; color: var(--muted); font-weight: 600; letter-spacing: 0.3px; }
+  .order .name { font-size: 15px; font-weight: 700; margin-top: 2px; }
+  .order .price { font-size: 13px; color: var(--ink); margin-top: 3px; font-weight: 600; }
+  .order .price .veg { color: var(--green); font-weight: 700; }
+
+  /* Camera / capture */
+  .capture-frame {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    background: #111;
+    border-radius: 14px;
+    overflow: hidden;
+    display: grid;
+    place-items: center;
+  }
+  .capture-frame video, .capture-frame img {
+    width: 100%; height: 100%; object-fit: cover; display: block;
+  }
+  .capture-frame .placeholder { color: #cfcfcf; font-size: 13px; text-align: center; padding: 16px; }
+  .cam-badge {
+    position: absolute; top: 10px; left: 10px;
+    background: rgba(0,0,0,0.55); color: #fff; font-size: 10.5px; font-weight: 600;
+    padding: 4px 8px; border-radius: 20px; display: flex; align-items: center; gap: 5px;
+  }
+  .cam-badge .dot { width: 7px; height: 7px; border-radius: 50%; background: #ff4d4d; }
+
+  .btn {
+    border: none; border-radius: 12px; font-size: 14.5px; font-weight: 700;
+    padding: 13px 16px; cursor: pointer; width: 100%; transition: transform .05s ease, opacity .2s;
+  }
+  .btn:active { transform: scale(0.985); }
+  .btn-primary { background: var(--zred); color: #fff; }
+  .btn-primary:disabled { background: #f1a9b0; cursor: not-allowed; }
+  .btn-ghost { background: #fff; color: var(--zred); border: 1.5px solid var(--zred); }
+  .btn-row { display: flex; gap: 10px; margin-top: 12px; }
+  .btn-row .btn { width: auto; flex: 1; }
+
+  /* Dropzone fallback */
+  .dropzone {
+    border: 2px dashed #dcdcdc; border-radius: 14px; padding: 22px 14px;
+    text-align: center; color: var(--muted); font-size: 13px; cursor: pointer;
+    transition: border-color .15s, background .15s;
+  }
+  .dropzone.drag { border-color: var(--zred); background: #fff5f5; color: var(--zred); }
+  .dropzone .big { font-size: 26px; display: block; margin-bottom: 6px; }
+  .hidden { display: none !important; }
+
+  /* Demo controls */
+  .controls { display: flex; gap: 10px; }
+  .field { flex: 1; }
+  .field label { font-size: 11px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .4px; }
+  .field input {
+    width: 100%; margin-top: 5px; padding: 10px 12px; font-size: 14px;
+    border: 1.5px solid var(--line); border-radius: 10px; background: #fafafa; color: var(--ink);
+  }
+  .field input:focus { outline: none; border-color: var(--zred); background: #fff; }
+  .demo-tag {
+    display: inline-flex; align-items: center; gap: 5px; font-size: 10.5px; font-weight: 700;
+    color: #8a6d00; background: #fff6d6; padding: 3px 8px; border-radius: 6px; margin-bottom: 10px;
+  }
+
+  /* Result card */
+  .result { padding: 0; overflow: hidden; }
+  .result-head { padding: 18px 16px; color: #fff; display: flex; align-items: center; gap: 16px; }
+  .result-head.ok { background: linear-gradient(135deg, #2f9e4f, #1e7d3c); }
+  .result-head.flag { background: linear-gradient(135deg, #e23744, #a81826); }
+  .ring {
+    --pct: 0;
+    width: 76px; height: 76px; border-radius: 50%; flex-shrink: 0;
+    background: conic-gradient(#fff calc(var(--pct) * 1%), rgba(255,255,255,0.28) 0);
+    display: grid; place-items: center;
+  }
+  .ring .inner {
+    width: 60px; height: 60px; border-radius: 50%; background: rgba(0,0,0,0.12);
+    display: grid; place-items: center; text-align: center; line-height: 1;
+  }
+  .ring .score { font-size: 22px; font-weight: 800; }
+  .ring .of { font-size: 9px; opacity: 0.85; margin-top: 2px; }
+  .result-head .rmeta { flex: 1; }
+  .result-head .status-title { font-size: 17px; font-weight: 800; }
+  .result-head .status-sub { font-size: 12.5px; opacity: 0.95; margin-top: 3px; line-height: 1.4; }
+  .band-pill {
+    display: inline-block; margin-top: 8px; font-size: 10.5px; font-weight: 800;
+    letter-spacing: .5px; text-transform: uppercase; padding: 3px 9px; border-radius: 20px;
+    background: rgba(255,255,255,0.22);
+  }
+
+  .accordion { border-top: 1px solid var(--line); }
+  .acc-toggle {
+    width: 100%; background: #fff; border: none; padding: 14px 16px; font-size: 13.5px;
+    font-weight: 700; color: var(--ink); display: flex; justify-content: space-between;
+    align-items: center; cursor: pointer;
+  }
+  .acc-toggle .chev { transition: transform .2s; color: var(--muted); }
+  .acc-toggle.open .chev { transform: rotate(180deg); }
+  .acc-body { padding: 0 16px; max-height: 0; overflow: hidden; transition: max-height .28s ease, padding .28s ease; }
+  .acc-body.open { max-height: 640px; padding: 4px 16px 16px; }
+
+  .signal { padding: 10px 0; border-bottom: 1px solid #f3f3f3; }
+  .signal:last-child { border-bottom: none; }
+  .signal .top { display: flex; justify-content: space-between; align-items: baseline; }
+  .signal .sname { font-size: 13px; font-weight: 700; }
+  .signal .sval { font-size: 12.5px; font-weight: 700; }
+  .signal .reason { font-size: 11.5px; color: var(--muted); margin-top: 3px; line-height: 1.4; }
+  .bar { height: 6px; border-radius: 4px; background: #eee; margin-top: 7px; overflow: hidden; }
+  .bar > span { display: block; height: 100%; border-radius: 4px; }
+
+  .error-note {
+    background: #fff5f5; color: #a81826; border: 1px solid #f3c0c4; border-radius: 12px;
+    padding: 12px 14px; font-size: 13px;
+  }
+  .footer-note { text-align: center; font-size: 10.5px; color: #aaa; padding: 4px 0 10px; }
+  .spinner {
+    width: 16px; height: 16px; border: 2.5px solid rgba(255,255,255,0.5); border-top-color: #fff;
+    border-radius: 50%; animation: spin .7s linear infinite; display: inline-block; vertical-align: -3px; margin-right: 8px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<div class="phone">
+  <header class="header">
+    <div class="wordmark">zomato</div>
+    <div class="sub">📍 Koramangala · Order support</div>
+  </header>
+
+  <main class="content">
+    <!-- Order summary -->
+    <section class="card">
+      <div class="order">
+        <div class="thumb">🍛</div>
+        <div class="meta">
+          <div class="oid">ORDER #ZOM-98214</div>
+          <div class="name">Paneer Butter Masala Combo</div>
+          <div class="price"><span class="veg">●</span> ₹340 · Delivered 12 mins ago</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Return / capture -->
+    <section class="card">
+      <h2>Report an issue with your order</h2>
+      <p class="hint">Snap a photo of the item you received. Our Trust Engine verifies it instantly for a real-time refund.</p>
+
+      <div class="capture-frame" id="captureFrame" style="margin-top:14px;">
+        <div class="cam-badge hidden" id="camBadge"><span class="dot"></span> LIVE</div>
+        <video id="video" playsinline autoplay muted class="hidden"></video>
+        <img id="preview" class="hidden" alt="Captured return photo" />
+        <div class="placeholder" id="camPlaceholder">Starting camera…</div>
+      </div>
+
+      <!-- Camera controls -->
+      <div id="cameraControls" class="hidden">
+        <div class="btn-row">
+          <button class="btn btn-primary" id="snapBtn">📸 Snap Photo</button>
+          <button class="btn btn-ghost hidden" id="retakeBtn">Retake</button>
+        </div>
+      </div>
+
+      <!-- Fallback uploader -->
+      <div id="uploader" class="hidden" style="margin-top:12px;">
+        <div class="dropzone" id="dropzone">
+          <span class="big">🖼️</span>
+          <strong>Tap to upload</strong> or drag &amp; drop a photo<br />
+          <span style="font-size:11px;">Camera unavailable — use a file instead</span>
+        </div>
+        <input type="file" id="fileInput" accept="image/*" class="hidden" />
+      </div>
+    </section>
+
+    <!-- Demo controls -->
+    <section class="card">
+      <span class="demo-tag">⚙️ DEMO CONTROLS</span>
+      <div class="controls">
+        <div class="field">
+          <label for="accountId">Account ID</label>
+          <input id="accountId" value="Account_A" autocomplete="off" spellcheck="false" />
+        </div>
+        <div class="field">
+          <label for="claimId">Claim ID</label>
+          <input id="claimId" value="Claim_01" autocomplete="off" spellcheck="false" />
+        </div>
+      </div>
+      <p class="hint" style="margin-top:10px;">Tip: submit the same photo under a different Account ID to trigger cross-account duplicate detection.</p>
+    </section>
+
+    <button class="btn btn-primary" id="submitBtn" disabled>Get Instant Refund</button>
+
+    <!-- Result -->
+    <section id="resultCard" class="card result hidden"></section>
+    <section id="errorCard" class="error-note hidden"></section>
+
+    <div class="footer-note">Prototype · Powered by Trust Engine</div>
+  </main>
+</div>
+
+<canvas id="canvas" class="hidden"></canvas>
+
+<script>
+(function () {
+  "use strict";
+
+  var video = document.getElementById("video");
+  var preview = document.getElementById("preview");
+  var canvas = document.getElementById("canvas");
+  var camBadge = document.getElementById("camBadge");
+  var camPlaceholder = document.getElementById("camPlaceholder");
+  var cameraControls = document.getElementById("cameraControls");
+  var snapBtn = document.getElementById("snapBtn");
+  var retakeBtn = document.getElementById("retakeBtn");
+  var uploader = document.getElementById("uploader");
+  var dropzone = document.getElementById("dropzone");
+  var fileInput = document.getElementById("fileInput");
+  var submitBtn = document.getElementById("submitBtn");
+  var resultCard = document.getElementById("resultCard");
+  var errorCard = document.getElementById("errorCard");
+
+  var stream = null;
+  var photoBlob = null;
+
+  var LABELS = {
+    account_history: "Account History",
+    claim_details: "Claim Details",
+    risk_flags: "Risk Flags",
+    image_condition: "Photo Condition",
+    image_authenticity: "Photo Authenticity"
+  };
+
+  function setPhoto(blob) {
+    photoBlob = blob;
+    submitBtn.disabled = !blob;
+  }
+
+  function showPreview(url) {
+    preview.src = url;
+    preview.classList.remove("hidden");
+    video.classList.add("hidden");
+    camBadge.classList.add("hidden");
+    camPlaceholder.classList.add("hidden");
+    snapBtn.classList.add("hidden");
+    retakeBtn.classList.remove("hidden");
+  }
+
+  function backToCamera() {
+    preview.classList.add("hidden");
+    if (stream) {
+      video.classList.remove("hidden");
+      camBadge.classList.remove("hidden");
+      snapBtn.classList.remove("hidden");
+    } else {
+      camPlaceholder.classList.remove("hidden");
+    }
+    retakeBtn.classList.add("hidden");
+    setPhoto(null);
+  }
+
+  // --- Camera ---
+  function initCamera() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      return enableUploader();
+    }
+    navigator.mediaDevices
+      .getUserMedia({ video: { facingMode: "environment" }, audio: false })
+      .then(function (s) {
+        stream = s;
+        video.srcObject = s;
+        video.classList.remove("hidden");
+        camBadge.classList.remove("hidden");
+        camPlaceholder.classList.add("hidden");
+        cameraControls.classList.remove("hidden");
+      })
+      .catch(function () {
+        enableUploader();
+      });
+  }
+
+  function enableUploader() {
+    cameraControls.classList.add("hidden");
+    camPlaceholder.textContent = "Camera unavailable";
+    uploader.classList.remove("hidden");
+  }
+
+  snapBtn.addEventListener("click", function () {
+    if (!video.videoWidth) return;
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext("2d").drawImage(video, 0, 0);
+    canvas.toBlob(
+      function (blob) {
+        if (!blob) return;
+        setPhoto(blob);
+        showPreview(URL.createObjectURL(blob));
+      },
+      "image/jpeg",
+      0.9
+    );
+  });
+
+  retakeBtn.addEventListener("click", backToCamera);
+
+  // --- Uploader fallback ---
+  dropzone.addEventListener("click", function () { fileInput.click(); });
+  fileInput.addEventListener("change", function (e) {
+    if (e.target.files && e.target.files[0]) acceptFile(e.target.files[0]);
+  });
+  ["dragenter", "dragover"].forEach(function (ev) {
+    dropzone.addEventListener(ev, function (e) {
+      e.preventDefault();
+      dropzone.classList.add("drag");
+    });
+  });
+  ["dragleave", "drop"].forEach(function (ev) {
+    dropzone.addEventListener(ev, function (e) {
+      e.preventDefault();
+      dropzone.classList.remove("drag");
+    });
+  });
+  dropzone.addEventListener("drop", function (e) {
+    var files = e.dataTransfer && e.dataTransfer.files;
+    if (files && files[0]) acceptFile(files[0]);
+  });
+
+  function acceptFile(file) {
+    if (!/^image\//.test(file.type)) {
+      showError("Please choose an image file.");
+      return;
+    }
+    setPhoto(file);
+    showPreview(URL.createObjectURL(file));
+  }
+
+  // --- Submit ---
+  submitBtn.addEventListener("click", function () {
+    if (!photoBlob) return;
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<span class="spinner"></span>Verifying photo…';
+    errorCard.classList.add("hidden");
+    resultCard.classList.add("hidden");
+
+    var accountId = document.getElementById("accountId").value.trim() || "Account_A";
+    var claimId = document.getElementById("claimId").value.trim() || "Claim_01";
+
+    var fd = new FormData();
+    fd.append("file", photoBlob, "return.jpg");
+    fd.append(
+      "context_json",
+      JSON.stringify({ account: { account_id: accountId }, claim: { claim_id: claimId } })
+    );
+
+    fetch("/returns/evaluate", { method: "POST", body: fd })
+      .then(function (res) {
+        return res.json().then(function (body) {
+          if (!res.ok) throw new Error(body.detail || "Request failed (" + res.status + ")");
+          return body;
+        });
+      })
+      .then(renderResult)
+      .catch(function (err) {
+        showError(err.message || "Something went wrong.");
+      })
+      .finally(function () {
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Get Instant Refund";
+      });
+  });
+
+  function showError(msg) {
+    errorCard.textContent = "⚠️ " + msg;
+    errorCard.classList.remove("hidden");
+  }
+
+  function scoreColor(v) {
+    if (v >= 0.7) return "#267e3e";
+    if (v >= 0.4) return "#f2a73b";
+    return "#e23744";
+  }
+
+  function renderResult(data) {
+    var flagged = data.reuse_matches > 0 || data.band === "low";
+    var reasonSub;
+    if (data.reuse_matches > 0) {
+      reasonSub = "Duplicate photo detected across " + data.reuse_matches +
+        " prior claim(s). Refund blocked pending review.";
+    } else if (flagged) {
+      reasonSub = "Trust score below the safe threshold. Sent to manual review.";
+    } else {
+      reasonSub = "Verified authentic. Instant refund processed.";
+    }
+
+    var statusTitle = flagged ? "Flagged for Fraud" : "₹340 Credited to Zomato Pay";
+    var pct = Math.max(0, Math.min(100, data.value));
+
+    var signalsHtml = (data.results || [])
+      .map(function (r) {
+        var label = LABELS[r.name] || r.name;
+        var pctS = Math.round(r.score * 100);
+        return (
+          '<div class="signal">' +
+          '<div class="top"><span class="sname">' + label + "</span>" +
+          '<span class="sval" style="color:' + scoreColor(r.score) + '">' + pctS + "%</span></div>" +
+          '<div class="bar"><span style="width:' + pctS + "%;background:" + scoreColor(r.score) + '"></span></div>' +
+          '<div class="reason">' + escapeHtml(r.reason || "") + "</div>" +
+          "</div>"
+        );
+      })
+      .join("");
+
+    resultCard.innerHTML =
+      '<div class="result-head ' + (flagged ? "flag" : "ok") + '">' +
+        '<div class="ring" style="--pct:' + pct + '"><div class="inner">' +
+          '<div><div class="score">' + pct.toFixed(0) + '</div><div class="of">/100</div></div>' +
+        "</div></div>" +
+        '<div class="rmeta">' +
+          '<div class="status-title">' + statusTitle + "</div>" +
+          '<div class="status-sub">' + reasonSub + "</div>" +
+          '<span class="band-pill">' + (data.band || "") + " trust</span>" +
+        "</div>" +
+      "</div>" +
+      '<div class="accordion">' +
+        '<button class="acc-toggle" id="accToggle">' +
+          "<span>View verification breakdown (" + (data.results || []).length + " signals)</span>" +
+          '<span class="chev">▾</span>' +
+        "</button>" +
+        '<div class="acc-body" id="accBody">' + signalsHtml + "</div>" +
+      "</div>";
+
+    resultCard.classList.remove("hidden");
+
+    var toggle = document.getElementById("accToggle");
+    var body = document.getElementById("accBody");
+    toggle.addEventListener("click", function () {
+      toggle.classList.toggle("open");
+      body.classList.toggle("open");
+    });
+
+    resultCard.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+
+  function escapeHtml(s) {
+    return String(s)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  initCamera();
+})();
+</script>
+</body>
+</html>
