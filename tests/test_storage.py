@@ -57,3 +57,35 @@ def test_persists_across_instances(tmp_path):
 
     reopened = EvaluationStore(db)
     assert reopened.count() == 1
+
+
+def test_record_and_fetch_image_hashes(tmp_path):
+    store = EvaluationStore(tmp_path / "audit.db")
+    store.record_image_hash(1, "abcd1234", account_id="A", claim_id="1", provider="stub")
+    store.record_image_hash(2, "ffff0000", account_id="B", claim_id="2", provider="stub")
+
+    rows = store.fetch_image_hashes()
+    assert len(rows) == 2
+    # Newest first.
+    assert rows[0]["phash"] == "ffff0000"
+    assert rows[0]["account_id"] == "B"
+    assert rows[1]["evaluation_id"] == 1
+
+
+def test_record_image_hash_skips_empty(tmp_path):
+    store = EvaluationStore(tmp_path / "audit.db")
+    store.record_image_hash(1, "", account_id="A")
+    assert store.fetch_image_hashes() == []
+
+
+def test_fetch_image_hashes_respects_limit(tmp_path):
+    store = EvaluationStore(tmp_path / "audit.db")
+    for i in range(5):
+        store.record_image_hash(i, f"hash{i}")
+    assert len(store.fetch_image_hashes(limit=2)) == 2
+
+
+def test_image_hashes_persist_across_instances(tmp_path):
+    db = tmp_path / "audit.db"
+    EvaluationStore(db).record_image_hash(1, "deadbeef", account_id="A")
+    assert len(EvaluationStore(db).fetch_image_hashes()) == 1

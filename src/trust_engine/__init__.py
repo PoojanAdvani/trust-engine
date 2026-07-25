@@ -20,7 +20,9 @@ from .signals import (
     Signal,
     default_signals,
 )
+from .reuse import ReuseMatch, detect_reuse, hamming_distance
 from .vision import (
+    AverageHashVisionProvider,
     CloudVisionProvider,
     OnnxVisionProvider,
     StubVisionProvider,
@@ -50,7 +52,11 @@ __all__ = [
     "default_signals",
     "VisionProvider",
     "StubVisionProvider",
+    "AverageHashVisionProvider",
     "CloudVisionProvider",
     "OnnxVisionProvider",
     "get_vision_provider",
+    "hamming_distance",
+    "detect_reuse",
+    "ReuseMatch",
 ]

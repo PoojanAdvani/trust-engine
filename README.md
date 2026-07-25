@@ -77,7 +77,8 @@ Backends are pluggable via a `VisionProvider`, selected by
 
 | Provider | Deps | Notes |
 | -------- | ---- | ----- |
-| `stub` (default) | none | Deterministic; for dev/tests. Keeps the base image slim. |
+| `stub` (default) | none | Deterministic; for dev/tests. Exact-duplicate detection only. Keeps the base image slim. |
+| `ahash` | `[vision]` (`pillow`) | Real 64-bit average-hash perceptual hash; enables near-duplicate reuse detection. |
 | `cloud` | `[vision]` (`httpx`) | Calls an external HTTP vision API (`TRUST_ENGINE_VISION_API_URL`/`_API_KEY`). |
 | `onnx` | `[vision]` (`onnxruntime`, `opencv-python-headless`, `pillow`) | Local model at `TRUST_ENGINE_VISION_MODEL_PATH`. |
 
@@ -89,6 +90,26 @@ Example:
 ```bash
 curl -F "file=@return.jpg;type=image/jpeg" http://127.0.0.1:8000/returns/evaluate
 ```
+
+### Cross-claim reuse detection
+
+Each uploaded photo's perceptual hash is stored (in an indexed `image_analyses`
+table) and every new upload is compared against the history using **Hamming
+distance**. A match from a *different account or claim* raises `reused_score`,
+which the `image_authenticity` signal turns into a lower trust score; a match at
+Hamming distance 0 (exact duplicate) is the strongest penalty, scaling down
+toward the threshold. Provide `account_id` / `claim_id` in `context_json` so a
+legitimate same-account, same-claim re-upload is not penalized:
+
+```bash
+curl -F "file=@return.jpg;type=image/jpeg" \
+     -F 'context_json={"account":{"account_id":"acct_42"},"claim":{"claim_id":"clm_9"}}' \
+     http://127.0.0.1:8000/returns/evaluate
+```
+
+The response includes `reuse_matches` (how many prior photos matched). The stub
+provider detects exact duplicates; the `ahash` provider also catches resized /
+recompressed near-duplicates.
 
 ## Configuration
 
@@ -111,6 +132,8 @@ Runtime settings are read from the environment (or a local `.env` file):
 | `TRUST_ENGINE_VISION_API_KEY`  | _(unset)_      | Cloud provider API key |
 | `TRUST_ENGINE_VISION_MODEL_PATH` | _(unset)_    | ONNX model path for the local provider |
 | `TRUST_ENGINE_VISION_MAX_BYTES` | `8000000`     | Max accepted upload size (bytes) |
+| `TRUST_ENGINE_REUSE_DETECTION_ENABLED` | `true` | Toggle cross-claim image reuse detection |
+| `TRUST_ENGINE_PHASH_HAMMING_THRESHOLD` | `10`   | Max Hamming distance counted as a reuse match |
 
 ## Authentication
 
@@ -152,7 +175,8 @@ trust-engine/
 │       ├── engine.py     # TrustEngine aggregator
 │       ├── config.py     # YAML config loader
 │       ├── storage.py    # SQLite audit store
-│       ├── vision.py     # Pluggable vision providers (stub/cloud/onnx)
+│       ├── vision.py     # Pluggable vision providers (stub/ahash/cloud/onnx)
+│       ├── reuse.py      # Cross-claim phash reuse detection (Hamming distance)
 │       ├── settings.py   # Environment configuration
 │       └── api.py        # FastAPI application
 ├── tests/                # Test suite

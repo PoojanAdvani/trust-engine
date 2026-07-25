@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import hmac
 import json
-from dataclasses import asdict
+from dataclasses import asdict, replace
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile, status
 from fastapi.concurrency import run_in_threadpool
@@ -24,6 +24,7 @@ from . import __version__
 from .config import load_config
 from .engine import TrustEngine
 from .models import AccountHistory, ClaimDetails, ImageAnalysis, RiskFlags, TrustSubject
+from .reuse import detect_reuse
 from .settings import Settings
 from .storage import EvaluationStore
 from .vision import VisionProvider, get_vision_provider
@@ -40,6 +41,7 @@ class AccountHistoryIn(BaseModel):
     verified_phone: bool = False
     prior_claims: int = 0
     prior_disputes: int = 0
+    account_id: str = ""
 
 
 class ClaimDetailsIn(BaseModel):
@@ -47,6 +49,7 @@ class ClaimDetailsIn(BaseModel):
     has_documentation: bool = False
     days_since_incident: int = 0
     category: str = "general"
+    claim_id: str = ""
 
 
 class RiskFlagsIn(BaseModel):
@@ -91,6 +94,7 @@ class ImageAnalysisOut(BaseModel):
 
 class ReturnEvaluateResponse(EvaluateResponse):
     image: ImageAnalysisOut
+    reuse_matches: int = 0
 
 
 # --- App factory -----------------------------------------------------------
@@ -150,6 +154,8 @@ def create_app(
     app.state.api_key = resolved_api_key
     app.state.vision_provider = vision_provider
     app.state.vision_max_bytes = settings.vision_max_bytes
+    app.state.reuse_detection_enabled = settings.reuse_detection_enabled
+    app.state.phash_hamming_threshold = settings.phash_hamming_threshold
 
     # auto_error=False lets us allow open access when no key is configured and
     # still surface an Authorize button in Swagger when one is.
@@ -222,11 +228,34 @@ def create_app(
             )
 
         context = _parse_context(context_json)
+        account_id = context.account.account_id
+        claim_id = context.claim.claim_id
 
         # Run the (possibly blocking) provider off the event loop.
         features = await run_in_threadpool(
             vision_provider.analyze, data, content_type=file.content_type
         )
+
+        # Cross-claim reuse detection: compare this phash against stored hashes
+        # BEFORE recording it (so the new row cannot self-match).
+        reuse_count = 0
+        if app.state.reuse_detection_enabled and features.phash:
+
+            def _run_reuse():
+                candidates = store.fetch_image_hashes()
+                return detect_reuse(
+                    features.phash,
+                    account_id,
+                    claim_id,
+                    candidates,
+                    max_distance=app.state.phash_hamming_threshold,
+                )
+
+            reused_score, matches = await run_in_threadpool(_run_reuse)
+            reuse_count = len(matches)
+            features = replace(
+                features, reused_score=max(features.reused_score, reused_score)
+            )
 
         subject = TrustSubject(
             account=AccountHistory(**context.account.model_dump()),
@@ -236,6 +265,9 @@ def create_app(
         )
         score = engine.score(subject)
         evaluation_id = store.log(subject, score)
+        store.record_image_hash(
+            evaluation_id, features.phash, account_id, claim_id, features.provider
+        )
         return ReturnEvaluateResponse(
             evaluation_id=evaluation_id,
             value=score.value,
@@ -243,6 +275,7 @@ def create_app(
             results=[SignalResultOut(**asdict(r)) for r in score.results],
             explanation=score.explain(),
             image=ImageAnalysisOut(**asdict(features)),
+            reuse_matches=reuse_count,
         )
 
     @app.get(

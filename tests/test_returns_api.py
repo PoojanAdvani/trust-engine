@@ -153,3 +153,112 @@ def test_high_fraud_photo_lowers_score(tmp_path):
         fraud = client.post("/returns/evaluate", files=_image_file()).json()
 
     assert fraud["value"] < clean["value"]
+
+
+# --- Cross-claim reuse detection (Phase 8) ---------------------------------
+
+
+class MappedVisionProvider:
+    """Maps specific upload bytes to specific phashes for near-dup control."""
+
+    name = "mapped"
+
+    def __init__(self, mapping):
+        self.mapping = mapping
+
+    def analyze(self, image_bytes: bytes, *, content_type=None) -> ImageAnalysis:
+        return ImageAnalysis(
+            analyzed=True, phash=self.mapping[image_bytes], provider=self.name
+        )
+
+
+def _ctx(account_id="", claim_id=""):
+    body = {"account": {"account_id": account_id}, "claim": {"claim_id": claim_id}}
+    return {"context_json": json.dumps(body)}
+
+
+# A fixed-phash provider models "the same photo" regardless of byte encoding.
+def _fixed_phash_app(tmp_path, name="dup.db"):
+    provider = FakeVisionProvider(
+        phash="ffffffffffffffff",
+        reused_score=0.0,
+        synthetic_score=0.1,
+        edited_score=0.0,
+        damage_score=0.0,
+    )
+    return create_app(db_path=str(tmp_path / name), vision_provider=provider)
+
+
+def test_duplicate_across_accounts_flags_reuse(tmp_path):
+    with TestClient(_fixed_phash_app(tmp_path)) as client:
+        first = client.post(
+            "/returns/evaluate", files=_image_file(), data=_ctx("acctA", "clm1")
+        ).json()
+        second = client.post(
+            "/returns/evaluate", files=_image_file(), data=_ctx("acctB", "clm2")
+        ).json()
+
+    assert first["reuse_matches"] == 0
+    assert second["reuse_matches"] >= 1
+    assert second["image"]["reused_score"] == 1.0
+    assert second["value"] < first["value"]
+
+    # The authenticity signal is fully penalized (reused 1.0 -> score 0.0).
+    auth = next(r for r in second["results"] if r["name"] == "image_authenticity")
+    assert auth["score"] == 0.0
+
+
+def test_same_account_same_claim_reupload_not_penalized(tmp_path):
+    with TestClient(_fixed_phash_app(tmp_path)) as client:
+        first = client.post(
+            "/returns/evaluate", files=_image_file(), data=_ctx("acctA", "clm1")
+        ).json()
+        second = client.post(
+            "/returns/evaluate", files=_image_file(), data=_ctx("acctA", "clm1")
+        ).json()
+
+    assert second["reuse_matches"] == 0
+    assert second["image"]["reused_score"] == first["image"]["reused_score"]
+    assert second["value"] == first["value"]
+
+
+def test_different_image_no_match(tmp_path):
+    provider = MappedVisionProvider(
+        {b"img-a": "ffffffffffffffff", b"img-b": "0000000000000000"}
+    )
+    app = create_app(db_path=str(tmp_path / "diff.db"), vision_provider=provider)
+    with TestClient(app) as client:
+        client.post(
+            "/returns/evaluate",
+            files=_image_file(content=b"img-a"),
+            data=_ctx("acctA", "clm1"),
+        )
+        second = client.post(
+            "/returns/evaluate",
+            files=_image_file(content=b"img-b"),
+            data=_ctx("acctB", "clm2"),
+        ).json()
+
+    assert second["reuse_matches"] == 0
+
+
+def test_near_duplicate_across_accounts_flagged(tmp_path):
+    # phashes differ by a single bit -> within the default threshold of 10.
+    provider = MappedVisionProvider(
+        {b"img-a": "ffffffffffffffff", b"img-b": "fffffffffffffffe"}
+    )
+    app = create_app(db_path=str(tmp_path / "near.db"), vision_provider=provider)
+    with TestClient(app) as client:
+        client.post(
+            "/returns/evaluate",
+            files=_image_file(content=b"img-a"),
+            data=_ctx("acctA", "clm1"),
+        )
+        second = client.post(
+            "/returns/evaluate",
+            files=_image_file(content=b"img-b"),
+            data=_ctx("acctB", "clm2"),
+        ).json()
+
+    assert second["reuse_matches"] >= 1
+    assert 0.0 < second["image"]["reused_score"] < 1.0

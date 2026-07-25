@@ -75,3 +75,36 @@ def test_factory_rejects_unknown_provider():
 def test_cloud_requires_url():
     with pytest.raises(ValueError):
         CloudVisionProvider(api_url="")
+
+
+@pytest.mark.vision
+def test_average_hash_is_perceptual():
+    """The aHash provider yields perceptually-meaningful hashes (needs Pillow)."""
+    image_mod = pytest.importorskip("PIL.Image")
+    from io import BytesIO
+
+    from trust_engine.reuse import hamming_distance
+    from trust_engine.vision import AverageHashVisionProvider
+
+    def gradient_png(size: int = 64, invert: bool = False) -> bytes:
+        img = image_mod.new("L", (size, size))
+        data = []
+        for _y in range(size):
+            for x in range(size):
+                v = int(255 * x / size)
+                data.append(255 - v if invert else v)
+        img.putdata(data)
+        buf = BytesIO()
+        img.save(buf, format="PNG")
+        return buf.getvalue()
+
+    provider = AverageHashVisionProvider()
+    a = provider.analyze(gradient_png())
+    b = provider.analyze(gradient_png())
+    resized = provider.analyze(gradient_png(size=128))
+    inverted = provider.analyze(gradient_png(invert=True))
+
+    assert len(a.phash) == 16  # 64-bit hash
+    assert a.phash == b.phash  # identical images -> identical hash
+    assert hamming_distance(a.phash, resized.phash) <= 8  # near-duplicate stays close
+    assert hamming_distance(a.phash, inverted.phash) >= 16  # different image is far

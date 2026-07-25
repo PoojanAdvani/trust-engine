@@ -15,6 +15,7 @@ class AccountHistory:
     verified_phone: bool = False
     prior_claims: int = 0
     prior_disputes: int = 0
+    account_id: str = ""  # optional identifier for cross-account reuse detection
 
 
 @dataclass(frozen=True)
@@ -25,6 +26,7 @@ class ClaimDetails:
     has_documentation: bool = False
     days_since_incident: int = 0
     category: str = "general"
+    claim_id: str = ""  # optional identifier for cross-claim reuse detection
 
 
 @dataclass(frozen=True)

@@ -31,3 +31,7 @@ class Settings(BaseSettings):
     vision_api_key: str | None = None
     vision_model_path: str | None = None
     vision_max_bytes: int = 8_000_000  # reject uploads larger than ~8 MB
+
+    # Cross-claim image reuse detection.
+    reuse_detection_enabled: bool = True
+    phash_hamming_threshold: int = 10  # max bit distance counted as a match (64-bit hash)

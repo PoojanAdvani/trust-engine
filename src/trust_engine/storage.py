@@ -28,6 +28,25 @@ CREATE TABLE IF NOT EXISTS evaluations (
 )
 """
 
+# Additive table for cross-claim image reuse lookups. Created alongside
+# `evaluations`; because it uses IF NOT EXISTS it never migrates existing tables.
+_IMAGE_SCHEMA = """
+CREATE TABLE IF NOT EXISTS image_analyses (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    evaluation_id INTEGER NOT NULL,
+    created_at    TEXT    NOT NULL,
+    phash         TEXT    NOT NULL,
+    account_id    TEXT    NOT NULL DEFAULT '',
+    claim_id      TEXT    NOT NULL DEFAULT '',
+    provider      TEXT    NOT NULL DEFAULT ''
+)
+"""
+
+_IMAGE_PHASH_INDEX = (
+    "CREATE INDEX IF NOT EXISTS idx_image_analyses_phash "
+    "ON image_analyses(phash)"
+)
+
 
 class EvaluationStore:
     """Append-only log of trust evaluations backed by SQLite."""
@@ -44,6 +63,8 @@ class EvaluationStore:
     def _init_db(self) -> None:
         with self._connect() as conn:
             conn.execute(_SCHEMA)
+            conn.execute(_IMAGE_SCHEMA)
+            conn.execute(_IMAGE_PHASH_INDEX)
 
     def log(self, subject: TrustSubject, score: TrustScore) -> int:
         """Persist one evaluation and return its new row id."""
@@ -89,6 +110,45 @@ class EvaluationStore:
         """Return the total number of logged evaluations."""
         with self._connect() as conn:
             return int(conn.execute("SELECT COUNT(*) FROM evaluations").fetchone()[0])
+
+    def record_image_hash(
+        self,
+        evaluation_id: int,
+        phash: str,
+        account_id: str = "",
+        claim_id: str = "",
+        provider: str = "",
+    ) -> None:
+        """Record an image's perceptual hash for future reuse lookups.
+
+        No-op when ``phash`` is empty (e.g. a provider that produced no hash).
+        """
+        if not phash:
+            return
+        created_at = datetime.now(timezone.utc).isoformat()
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO image_analyses
+                    (evaluation_id, created_at, phash, account_id, claim_id, provider)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (evaluation_id, created_at, phash, account_id, claim_id, provider),
+            )
+
+    def fetch_image_hashes(self, limit: int | None = None) -> list[dict[str, Any]]:
+        """Return stored image-hash records (newest first) for reuse matching."""
+        query = (
+            "SELECT id, evaluation_id, created_at, phash, account_id, claim_id, "
+            "provider FROM image_analyses ORDER BY id DESC"
+        )
+        params: tuple[Any, ...] = ()
+        if limit is not None:
+            query += " LIMIT ?"
+            params = (limit,)
+        with self._connect() as conn:
+            rows = conn.execute(query, params).fetchall()
+        return [dict(row) for row in rows]
 
     @staticmethod
     def _row_to_record(row: sqlite3.Row) -> dict[str, Any]:

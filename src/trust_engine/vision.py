@@ -64,6 +64,47 @@ class StubVisionProvider:
         )
 
 
+class AverageHashVisionProvider:
+    """Produces a real 64-bit perceptual hash (average hash) using Pillow.
+
+    Unlike the stub's crypto-derived hash, an average hash is *perceptual*: two
+    visually similar images (resized, recompressed) yield hashes a small Hamming
+    distance apart, which is what cross-claim near-duplicate detection needs.
+    Lazy-imports :mod:`PIL` so the class exists without the ``vision`` extra.
+
+    It only computes a hash; the fraud/condition sub-scores are left at ``0.0``
+    (cross-claim reuse is decided by the database lookup, not this provider).
+    """
+
+    name = "ahash"
+
+    def analyze(
+        self, image_bytes: bytes, *, content_type: str | None = None
+    ) -> ImageAnalysis:
+        from io import BytesIO
+
+        from PIL import Image  # lazy: only needed when this provider is used
+
+        with Image.open(BytesIO(image_bytes)) as img:
+            small = img.convert("L").resize((8, 8), Image.Resampling.LANCZOS)
+            # "L" mode yields one byte per pixel; tobytes avoids getdata's
+            # deprecation and is stable across Pillow versions.
+            pixels = list(small.tobytes())
+
+        mean = sum(pixels) / len(pixels)
+        bits = 0
+        for pixel in pixels:
+            bits = (bits << 1) | (1 if pixel > mean else 0)
+        phash = format(bits, "016x")  # 64 bits -> 16 hex chars
+
+        return ImageAnalysis(
+            analyzed=True,
+            phash=phash,
+            provider=self.name,
+            notes="average-hash perceptual hash (64-bit)",
+        )
+
+
 class CloudVisionProvider:
     """Provider that calls an external HTTP vision API.
 
@@ -140,6 +181,8 @@ def get_vision_provider(settings: Settings) -> VisionProvider:
 
     if provider == "stub":
         return StubVisionProvider()
+    if provider == "ahash":
+        return AverageHashVisionProvider()
     if provider == "cloud":
         return CloudVisionProvider(
             api_url=settings.vision_api_url or "",
@@ -150,5 +193,5 @@ def get_vision_provider(settings: Settings) -> VisionProvider:
 
     raise ValueError(
         f"Unknown vision provider '{settings.vision_provider}'. "
-        "Expected one of: stub, cloud, onnx."
+        "Expected one of: stub, ahash, cloud, onnx."
     )
