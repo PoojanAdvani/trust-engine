@@ -27,6 +27,26 @@ jobs:
       - name: Run tests
         run: pytest -q
 
+  vision-test:
+    name: Vision tests ([vision] extra)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install dependencies (with vision extra)
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev,vision]"
+
+      - name: Run vision-marked tests
+        run: pytest -m vision -q
+
   docker-build:
     name: Docker build & smoke test
     runs-on: ubuntu-latest
