@@ -118,6 +118,7 @@
     width: 100%; height: 100%; object-fit: cover; display: block;
   }
   .capture-frame .placeholder { color: #cfcfcf; font-size: 13px; text-align: center; padding: 16px; }
+  .capture-frame .placeholder .ph-icon { display: block; font-size: 32px; margin-bottom: 8px; opacity: 0.85; }
   .cam-badge {
     position: absolute; top: 10px; left: 10px;
     background: rgba(0,0,0,0.55); color: #fff; font-size: 10.5px; font-weight: 600;
@@ -254,7 +255,13 @@
         <div class="cam-badge hidden" id="camBadge"><span class="dot"></span> LIVE</div>
         <video id="video" playsinline autoplay muted class="hidden"></video>
         <img id="preview" class="hidden" alt="Captured return photo" />
-        <div class="placeholder" id="camPlaceholder">Starting camera…</div>
+        <div class="placeholder" id="camPlaceholder"><span class="ph-icon">📷</span>Camera is off</div>
+      </div>
+
+      <!-- Initial controls: open camera or upload (camera is not started until asked) -->
+      <div id="openControls" class="btn-row">
+        <button class="btn btn-primary" id="openCamBtn">📷 Open Camera</button>
+        <button class="btn btn-ghost" id="useUploadBtn">Upload Photo</button>
       </div>
 
       <!-- Camera controls -->
@@ -322,6 +329,12 @@
   var submitBtn = document.getElementById("submitBtn");
   var resultCard = document.getElementById("resultCard");
   var errorCard = document.getElementById("errorCard");
+  var openControls = document.getElementById("openControls");
+  var openCamBtn = document.getElementById("openCamBtn");
+  var useUploadBtn = document.getElementById("useUploadBtn");
+
+  // Reject images darker than this average luminance (0-255) as blank/invalid.
+  var MIN_LUMINANCE = 15;
 
   var stream = null;
   var photoBlob = null;
@@ -391,6 +404,7 @@
         video.classList.remove("hidden");
         camBadge.classList.remove("hidden");
         camPlaceholder.classList.add("hidden");
+        openControls.classList.add("hidden");
         cameraControls.classList.remove("hidden");
         snapBtn.classList.remove("hidden");
         retakeBtn.classList.add("hidden");
@@ -402,11 +416,19 @@
 
   function enableUploader() {
     cameraMode = false;
+    openControls.classList.add("hidden");
     cameraControls.classList.add("hidden");
     camPlaceholder.textContent = "Camera unavailable";
     camPlaceholder.classList.remove("hidden");
     uploader.classList.remove("hidden");
   }
+
+  // Camera access is deferred until the user asks for it.
+  openCamBtn.addEventListener("click", function () {
+    camPlaceholder.textContent = "Starting camera…";
+    initCamera();
+  });
+  useUploadBtn.addEventListener("click", enableUploader);
 
   snapBtn.addEventListener("click", function () {
     if (!video.videoWidth) return;
@@ -458,6 +480,30 @@
     showPreview(URL.createObjectURL(file));
   }
 
+  // Average pixel luminance (0-255) of an image blob, sampled on a small canvas.
+  function averageLuminance(blob) {
+    return new Promise(function (resolve, reject) {
+      var img = new Image();
+      img.onload = function () {
+        var w = 64, h = 64;
+        var c = document.createElement("canvas");
+        c.width = w; c.height = h;
+        var cx = c.getContext("2d");
+        cx.drawImage(img, 0, 0, w, h);
+        var d = cx.getImageData(0, 0, w, h).data;
+        var sum = 0, n = 0;
+        for (var i = 0; i < d.length; i += 4) {
+          sum += 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+          n++;
+        }
+        URL.revokeObjectURL(img.src);
+        resolve(n ? sum / n : 255);
+      };
+      img.onerror = function () { URL.revokeObjectURL(img.src); reject(new Error("decode failed")); };
+      img.src = URL.createObjectURL(blob);
+    });
+  }
+
   // --- Submit ---
   submitBtn.addEventListener("click", function () {
     if (!photoBlob) return;
@@ -466,6 +512,24 @@
     errorCard.classList.add("hidden");
     resultCard.classList.add("hidden");
 
+    // Pitch-black / blank image guard: reject dark photos before evaluating.
+    averageLuminance(photoBlob).then(function (lum) {
+      if (lum < MIN_LUMINANCE) {
+        showError("Photo too dark or invalid. Please ensure the item is clearly visible in good lighting.");
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Get Instant Refund";
+        return;
+      }
+      sendClaim();
+    }).catch(function () {
+      // If we cannot decode the image at all, treat it as invalid.
+      showError("Photo too dark or invalid. Please ensure the item is clearly visible in good lighting.");
+      submitBtn.disabled = false;
+      submitBtn.textContent = "Get Instant Refund";
+    });
+  });
+
+  function sendClaim() {
     var accountId = document.getElementById("accountId").value.trim() || "Account_A";
     var claimId = document.getElementById("claimId").value.trim() || "Claim_01";
 
@@ -491,7 +555,7 @@
         submitBtn.disabled = false;
         submitBtn.textContent = "Get Instant Refund";
       });
-  });
+  }
 
   function showError(msg) {
     errorCard.textContent = "⚠️ " + msg;
@@ -583,7 +647,7 @@
     document.body.classList.toggle("demo", e.target.checked);
   });
 
-  initCamera();
+  // Camera is NOT started on load; it opens only when the user taps "Open Camera".
 })();
 </script>
 </body>
