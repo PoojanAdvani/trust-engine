@@ -345,12 +345,18 @@ def create_app(
 
 
 def run() -> None:
-    """Console-script entry point: serve the app with uvicorn."""
+    """Console-script entry point: serve the app with uvicorn.
+
+    Honors ``HOST``/``PORT`` from the environment (Render and most hosts inject
+    ``PORT``), defaulting to ``127.0.0.1:8000`` for local development.
+    """
+    import os
+
     import uvicorn
 
     uvicorn.run(
         "trust_engine.api:create_app",
         factory=True,
-        host="127.0.0.1",
-        port=8000,
+        host=os.environ.get("HOST", "127.0.0.1"),
+        port=int(os.environ.get("PORT", "8000")),
     )

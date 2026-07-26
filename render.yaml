@@ -1,0 +1,33 @@
+# Render.com Blueprint — https://render.com/docs/blueprint-spec
+#
+# Deploys the Trust Engine API as a free Python web service. It installs the
+# package from pyproject.toml (core dependencies only — the heavy [vision] extra
+# is NOT installed, so the default "stub" vision provider is used and the app
+# fits comfortably in the free tier's memory).
+#
+# To deploy: push this repo to GitHub, then in Render choose
+# "New +" -> "Blueprint" and point it at this repository.
+
+services:
+  - type: web
+    name: trust-engine
+    runtime: python
+    plan: free
+    buildCommand: pip install .
+    startCommand: uvicorn trust_engine.api:create_app --factory --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.13.4"
+      # Dependency-free vision provider (no onnxruntime/opencv) — keeps the free
+      # instance light. Set to "onnx"/"cloud" only on a plan with the extra installed.
+      - key: TRUST_ENGINE_VISION_PROVIDER
+        value: stub
+      # SQLite audit DB. The free tier has an ephemeral disk (resets on restart /
+      # redeploy) and no persistent volume, so /tmp is fine for a demo.
+      - key: TRUST_ENGINE_DB_PATH
+        value: /tmp/trust_engine.db
+      # Uncomment and set in the Render dashboard to require an X-API-Key header
+      # on /evaluate and /returns/evaluate (leave unset for an open demo):
+      # - key: TRUST_ENGINE_API_KEY
+      #   sync: false

@@ -195,6 +195,27 @@ All settings are read from `TRUST_ENGINE_*` env vars (or a local `.env`):
 
 ---
 
+## Deploy to Render (free)
+
+The repo ships a [`render.yaml`](render.yaml) blueprint. In Render, choose
+**New + → Blueprint** and point it at this repository — it provisions a free
+Python web service with:
+
+- **Build:** `pip install .`
+- **Start:** `uvicorn trust_engine.api:create_app --factory --host 0.0.0.0 --port $PORT`
+- **Health check:** `/health`
+
+The free instance installs core dependencies only (the heavy `[vision]` extra is
+excluded), so it runs the default `stub` vision provider and stays within the free
+tier's memory. The SQLite audit DB lives on the free tier's **ephemeral** disk
+(resets on restart/redeploy). Set `TRUST_ENGINE_API_KEY` in the Render dashboard to
+lock down the scoring endpoints.
+
+Prefer Docker? The [Dockerfile](Dockerfile) binds to `$PORT` (default `8000`), so it
+also deploys on Render with the **Docker** runtime.
+
+---
+
 ## API Reference
 
 Base URL: `http://127.0.0.1:8000`. When `TRUST_ENGINE_API_KEY` is set, scoring and

@@ -42,6 +42,6 @@ USER appuser
 
 EXPOSE 8000
 
-# Serve the app factory; bind to all interfaces so the container is reachable.
-CMD ["uvicorn", "trust_engine.api:create_app", "--factory", \
-     "--host", "0.0.0.0", "--port", "8000"]
+# Serve the app factory on $PORT (defaults to 8000 for local/compose; hosts like
+# Render inject their own PORT). Shell form so ${PORT} expands at runtime.
+CMD ["sh", "-c", "uvicorn trust_engine.api:create_app --factory --host 0.0.0.0 --port ${PORT:-8000}"]
